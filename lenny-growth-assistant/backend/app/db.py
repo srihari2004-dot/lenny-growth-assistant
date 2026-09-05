@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-from pgvector.psycopg import register_vector
+from pgvector.psycopg2 import register_vector
 from .config import get_settings
 
 
