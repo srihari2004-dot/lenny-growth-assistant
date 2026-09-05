@@ -10,3 +10,4 @@ anthropic>=0.67,<1
 claude-agent-sdk>=0.2.140,<0.3
 nh3>=0.2,<1
 pytest>=8,<9
+psycopg2-binary
