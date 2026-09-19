@@ -6,7 +6,6 @@ from sqlalchemy import select
 from .config import get_settings
 from .db import SessionLocal, init_db
 from .models import Document, Chunk
-from .providers import OllamaProvider
 
 settings = get_settings()
 DATA_ROOT = Path("/app/data/lenny-source")
@@ -23,7 +22,7 @@ def clean_markdown(text: str) -> str:
 def parse_metadata(path: Path, text: str):
     title = path.stem.replace("-", " ").replace("_", " ").strip()
     guest = None
-    for line in text.splitlines()[:30]:
+    for line in text.splitlines()[:40]:
         if line.lower().startswith("# "):
             title = line[2:].strip()
             break
@@ -47,18 +46,24 @@ def chunks(text: str):
 
 
 def ingest():
+    """Ingest transcript text without requiring an embedding service.
+
+    Embeddings remain optional. Cloud deployment uses PostgreSQL FTS retrieval;
+    local Ollama can populate embeddings separately if desired.
+    """
     init_db()
-    provider = OllamaProvider()
     files = sorted(DATA_ROOT.rglob("*.md"))
     if not files:
-        raise SystemExit(f"No Markdown files found under {DATA_ROOT}. Run scripts/fetch_transcripts.py first.")
+        raise SystemExit(f"No Markdown files found under {DATA_ROOT}.")
 
     with SessionLocal() as db:
         for path in files:
             raw = path.read_text(encoding="utf-8", errors="ignore")
             text = clean_markdown(raw)
             digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-            existing = db.execute(select(Document).where(Document.source_path == str(path))).scalar_one_or_none()
+            existing = db.execute(
+                select(Document).where(Document.source_path == str(path))
+            ).scalar_one_or_none()
             if existing and existing.content_hash == digest:
                 continue
             if existing:
@@ -67,21 +72,31 @@ def ingest():
 
             title, guest = parse_metadata(path, raw)
             doc = Document(
-                source_path=str(path),
+                source_path=str(path.relative_to(DATA_ROOT.parent)),
                 title=title,
                 guest=guest,
-                source_type="podcast" if "podcast" in str(path).lower() else "newsletter",
+                source_type="podcast" if "podcasts" in str(path).lower() else "newsletter",
                 content_hash=digest,
             )
             db.add(doc)
             db.flush()
 
-            pieces = list(chunks(text))
-            vectors = provider.embed(pieces)
-            for idx, (piece, vector) in enumerate(zip(pieces, vectors)):
-                db.add(Chunk(document_id=doc.id, chunk_index=idx, text=piece, embedding=vector))
+            for idx, piece in enumerate(chunks(text)):
+                db.add(
+                    Chunk(
+                        document_id=doc.id,
+                        chunk_index=idx,
+                        text=piece,
+                        embedding=None,
+                    )
+                )
             db.commit()
-            print(f"Ingested {title}: {len(pieces)} chunks")
+            print(f"Ingested {title}")
+
+
+def knowledge_base_ready() -> bool:
+    with SessionLocal() as db:
+        return db.execute(select(Document.id).limit(1)).first() is not None
 
 
 if __name__ == "__main__":
