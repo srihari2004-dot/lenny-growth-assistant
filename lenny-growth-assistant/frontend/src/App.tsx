@@ -8,7 +8,7 @@ export default function App() {
   const [sessionId, setSessionId] = useState("");
   const [messages, setMessages] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
-  const [provider, setProvider] = useState("ollama");
+  const [provider, setProvider] = useState("anthropic");
   const [busy, setBusy] = useState(false);
   const [artifact, setArtifact] = useState<{format: string, content: string} | null>(null);
   const [artifactBusy, setArtifactBusy] = useState(false);
