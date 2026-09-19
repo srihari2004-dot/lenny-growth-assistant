@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
 from .artifact import generate_artifact
+from .bootstrap import ensure_knowledge_base
+from .ingest import knowledge_base_ready
 from .agent import answer
 from .config import get_settings
 from .db import SessionLocal, init_db
@@ -34,6 +36,7 @@ app.add_middleware(
 @app.on_event("startup")
 def startup():
     init_db()
+    ensure_knowledge_base()
 
 
 @app.get("/health")
@@ -45,7 +48,13 @@ def health():
             db_ok = True
         except Exception:
             db_ok = False
-    return {"status": "ok" if db_ok else "degraded", "database": db_ok}
+    kb_ok = False
+    if db_ok:
+        try:
+            kb_ok = knowledge_base_ready()
+        except Exception:
+            kb_ok = False
+    return {"status": "ok" if db_ok else "degraded", "database": db_ok, "knowledge_base": kb_ok}
 
 
 @app.post("/api/sessions", response_model=SessionOut)
